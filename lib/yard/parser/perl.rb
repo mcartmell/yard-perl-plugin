@@ -29,17 +29,35 @@ module YARD
       class Comment < Code
         def to_s
           str = @content.gsub(/^\s*#/, '')
-          str.gsub!(/^ /, '') while str.any? { |line| line =~ /^ / } && str.all? { |line| line =~ /^ |^$/ }
+          str.gsub!(/^ /, '') while str.lines.any? { |line| line =~ /^ / } && str.lines.all? { |line| line =~ /^ |^$/ }
           str
         end
 
         def lines
           @line...(@line - 1 + @content.split("\n").length)
         end
+				
+				def initialize(args)
+					super
+				end
+
+				class PodBlock < Comment
+					def to_s
+						str = @content.lines.grep(/^[^\s=]/).join('')
+						str
+					end
+
+					def sub_for
+						if m = @content.match(/=item\s+([^\n]+)/)
+							return m[1]
+						end
+						return
+					end
+				end
       end
 
       class Package < Code
-        attr_accessor :comments, :name, :superclass
+        attr_accessor :comments, :comments_hash_flag, :name, :superclass
 
         def namespace
           "::#{@name}".split("::")[0...-1].join("::")
@@ -51,7 +69,7 @@ module YARD
       end
 
       class Sub < Code
-        attr_accessor :comments, :name, :body
+        attr_accessor :comments, :comments_hash_flag, :comments_range, :name, :body
         attr_writer   :visibility
 
         def visibility
@@ -62,7 +80,7 @@ module YARD
           return @parameters if @parameters
 
           @parameters = [].tap do |params|
-            @body.strip.take_while do |line|
+            @body.strip.lines.take_while do |line|
               if line.strip =~ /my\s+(.*?)\s*=\s*shift(\(\s*@_\s*\))?\s*;/
                 params << $1
               elsif line.strip =~ /my\s+\((.*?)\)\s*=\s*@_\s*;/
@@ -86,19 +104,29 @@ module YARD
           PerlSyntax.parse(@source, @processor = Processor.new(@filename))
 
           group   = nil
+					comments_for = {}
+
           watches = {
             # Watch for contiguous comment blocks
             'meta.comment.block' => proc { |s, e| s << Comment.new(e) },
 
+						'comment.block.documentation.perl' =>  proc do |s, e|
+							pb = Comment::PodBlock.new(e)
+							if subname = pb.sub_for
+								comments_for[subname] = pb
+							end
+							s << pb
+						end,
+
             # Watch for 'package' declarations
             'meta.class' => proc do |s, e|
               pkg = Package.new(e)
-              pkg.comments = s.pop.to_s if s.last.is_a?(Comment) && s.last.lines.end == (pkg.line - 1)
+              pkg.comments += s.pop.to_s if s.last.is_a?(Comment) && s.last.lines.end == (pkg.line - 1)
               index = s.length
 
               # Watch for the package name
-              watches['entity.name.type.class'] = proc do |_, e|
-                pkg.name = e[:content]
+              watches['entity.name.type.class'] = proc do |_, e2|
+                pkg.name = e2[:content]
                 watches.delete('entity.name.type.class')
               end
 
@@ -134,7 +162,7 @@ module YARD
             # Watch for named function declarations
             'meta.function.named' => proc do |s, e|
               sub = Sub.new(e)
-              sub.comments = s.pop.to_s if s.last.is_a?(Comment) && s.last.lines.end == (sub.line - 1)
+              sub.comments = s.pop.to_s if s.last.class == Comment && s.last.lines.end == (sub.line - 1)
               sub.group    = group      unless group.nil?
 
               # Watch for the function name
@@ -156,11 +184,20 @@ module YARD
           @processor.map { |x| x[:filename] = @filename }
 
           @stack = @processor.inject([]) do |stack, elem|
+						procs = []
             watches.each_pair do |key, val|
-              val[stack, elem] if elem[:scope] == key
+              procs.push(val) if elem[:scope] == key
             end
+						procs.each do |p|
+							p.call(stack, elem)
+						end
             stack
           end
+					@stack.each do |e|
+						if e.is_a?(Sub) && comments_for.has_key?(e.name)
+							e.comments = comments_for[e.name].to_s + e.comments
+						end
+					end
         end
 
         def enumerator

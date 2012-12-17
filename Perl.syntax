@@ -2,9 +2,7 @@
 scopeName: source.perl
 name: Perl
 keyEquivalent: ^~P
-comment: |
-  
-  	TODO:	Include RegExp syntax
+comment: "TODO: Include RegExp syntax"
 
 repository: 
   nested_ltgt: 
@@ -973,14 +971,14 @@ patterns:
   - name: constant.character.escape.perl
     match: \\['\\]
 - name: string.interpolated.perl
-  begin: `
+  begin: "`"
   endCaptures: 
     "0": 
       name: punctuation.definition.string.end.perl
   beginCaptures: 
     "0": 
       name: punctuation.definition.string.begin.perl
-  end: `
+  end: "`"
   patterns: 
   - include: "#escaped_char"
   - include: "#variable"
