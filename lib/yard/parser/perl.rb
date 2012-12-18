@@ -27,10 +27,10 @@ module YARD
       end
 
       class Comment < Code
+				attr_accessor :description, :subcontent
         def to_s
-					str = @subcontent || @content
+					str = @content
           str = str.gsub(/^\s*#/, '')
-          str.gsub!(/\t/,'  ')
 					str.gsub!(/^ (\S)/m, '\1')
 					str
         end
@@ -38,10 +38,9 @@ module YARD
         def lines
           @line...(@line - 1 + @content.split("\n").length)
         end
-				
+
 				def initialize(args)
 					super
-					@subcontent = nil
 				end
 
 				class PodBlock < Comment
@@ -50,40 +49,50 @@ module YARD
 						super
 						@for = nil
 						@description = false
-						#TODO currently can only reference one sub per pod block. This should be modified to return multiple blocks.
-						#TODO 
-						if m = @content.match(/=head(\d) DESCRIPTION(.*)?^=(head\1|cut)/ms)
-							@for = :_file
-							@description = true
-							@subcontent = m[2]
-						elsif m = @content.match(/^=(?:item|head[2-9])\s+([^\n]+)(.+?)=(cut|back)/ms)
-							name = m[1]
+						@for_map = {}
+						# create sub-objects just for the purpose of stringifying to docstrings
+						if m = @content.match(/=head(\d) DESCRIPTION(.*?)^=(head\1|cut|back)/ms)
+							pb = PodBlock.new({ content: m[2] })
+							pb.description = true
+							@for_map[:_file] = pb
+						end
+						@content.scan(/^=(item|head[2-9])\s+([^\n]+)(.+?)(?==(\1|cut|back))/ms) do |_,name, subcontent|
 							if name.match(/<(\w+)>/)
 								name = $1
 							end
-							@for = name
-							@subcontent = m[2]
+							name.gsub!(/\(.*\)$/, '')
+							pb = PodBlock.new({content: subcontent})
+							@for_map[name] = pb
 						end
+						rescue Encoding::CompatibilityError
+					end
+
+					def for_map
+						@for_map
 					end
 
 					def is_description?
 						@description
 					end
 
-					def for
-						@for
-					end
-
 # Do some basic conversion of pod -> rdoc/yard syntax
 					def to_s
-						str = super
+						str = @content
+						str.gsub!(/\t/,'  ')
+						# rdoc syntax
 						str.gsub!(/^=head(\d+)/) do
       				"=" * $1.to_i
     				end
-    				str.gsub!(/=item/, '')
+    				str.gsub!(/=item\s+/, '')
     				str.gsub!(/C<(.*?)>/, '<tt>\1</tt>')
     				str.gsub!(/I<(.*?)>/, '<i>\1</i>')
     				str.gsub!(/B<(.*?)>/, '<b>\1</b>')
+						str.gsub!(/^=over[^\n]+\n/ms, '')
+
+						# yard syntax
+						# convert first code block to example
+						str.gsub!(/\A(\s+)^(\t|  \s*\S)/, "\\1@example\n\\2")
+						# convert links
     				str.gsub!(/L<(.*?)>/) do |link|
 							link_and_ref = $1.split(/\|/)
 							thing = link_and_ref[0]
@@ -154,8 +163,10 @@ module YARD
 
 						'comment.block.documentation.perl' =>  proc do |s, e|
 							pb = Comment::PodBlock.new(e)
-							if cf = pb.for
-								comments_for[cf] = pb
+							unless pb.for_map.empty?
+								pb.for_map.each do |k,v|
+									comments_for[k] = v
+								end
 							end
 							s << pb
 						end,
