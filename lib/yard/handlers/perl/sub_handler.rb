@@ -8,6 +8,7 @@ class YARD::Handlers::Perl::SubHandler < YARD::Handlers::Perl::Base
       m.visibility = statement.visibility
       m.parameters = statement.parameters
       m.docstring  = statement.comments
+			m.explicit = true
 
       m.scope = case statement.parameters.first
         when /\$(self|instance)$/                   then :instance

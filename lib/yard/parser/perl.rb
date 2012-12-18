@@ -42,6 +42,19 @@ module YARD
 				end
 
 				class PodBlock < Comment
+
+					def initialize(args)
+						super
+						@pkg_description = nil
+						if m = @content.match(/=head\d NAME\n\n(\S+).*?=head\d DESCRIPTION(.*)?^=/ms)
+							@pkg_description = [m[1], m[2]]
+						end
+					end
+
+					def pkg_description
+						@pkg_description
+					end
+
 					def to_s
 						str = @content.lines.grep(/^[^\s=]/).join('')
 						str
@@ -82,9 +95,11 @@ module YARD
           @parameters = [].tap do |params|
             @body.strip.lines.take_while do |line|
               if line.strip =~ /my\s+(.*?)\s*=\s*shift(\(\s*@_\s*\))?\s*;/
-                params << $1
+                params << [$1,nil]
               elsif line.strip =~ /my\s+\((.*?)\)\s*=\s*@_\s*;/
-                  params.push *$1.split(/\s*(?:,|=>)\s*/)
+									$1.split(/\s*(?:,|=>)\s*/).map { |e| [e, nil] }.each do |param|
+										params << param
+									end
                   false
               else
                 false
@@ -112,7 +127,9 @@ module YARD
 
 						'comment.block.documentation.perl' =>  proc do |s, e|
 							pb = Comment::PodBlock.new(e)
-							if subname = pb.sub_for
+							if pkgd = pb.pkg_description
+								comments_for[pkgd[0]] = pkgd[1]
+							elsif subname = pb.sub_for
 								comments_for[subname] = pb
 							end
 							s << pb
@@ -194,7 +211,7 @@ module YARD
             stack
           end
 					@stack.each do |e|
-						if e.is_a?(Sub) && comments_for.has_key?(e.name)
+						if (e.is_a?(Sub) || e.is_a?(Package)) && comments_for.has_key?(e.name)
 							e.comments = comments_for[e.name].to_s + e.comments
 						end
 					end
