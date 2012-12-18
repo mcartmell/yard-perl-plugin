@@ -51,20 +51,20 @@ module YARD
 						@description = false
 						@for_map = {}
 						# create sub-objects just for the purpose of stringifying to docstrings
-						if m = @content.match(/=head(\d) DESCRIPTION(.*?)^=(head\1|cut|back)/ms)
+						if m = @content.match(/=head(\d) DESCRIPTION(.*?)^=(head\1|cut|back)/m)
 							pb = PodBlock.new({ content: m[2] })
 							pb.description = true
 							@for_map[:_file] = pb
 						end
-						@content.scan(/^=(item|head[2-9])\s+([^\n]+)(.+?)(?==(\1|cut|back))/ms) do |_,name, subcontent|
+						@content.scan(/^=(item|head[2-9])\s+([^\n]+)(.+?)(?==(head|cut|back|item))/m) do |_,name, subcontent|
 							if name.match(/<(\w+)>/)
 								name = $1
 							end
 							name.gsub!(/\(.*\)$/, '')
+							name.gsub!(/.*->/, '')
 							pb = PodBlock.new({content: subcontent})
 							@for_map[name] = pb
 						end
-						rescue Encoding::CompatibilityError
 					end
 
 					def for_map
@@ -87,11 +87,11 @@ module YARD
     				str.gsub!(/C<(.*?)>/, '<tt>\1</tt>')
     				str.gsub!(/I<(.*?)>/, '<i>\1</i>')
     				str.gsub!(/B<(.*?)>/, '<b>\1</b>')
-						str.gsub!(/^=over[^\n]+\n/ms, '')
+						str.gsub!(/^=(over|back)[^\n]*\n/m, '')
 
 						# yard syntax
 						# convert first code block to example
-						str.gsub!(/\A(\s+)^(\t|  \s*\S)/, "\\1@example\n\\2")
+						str.gsub!(/\A(\s+)^(\t| \s*\S)/, "\\1@example\n\\2")
 						# convert links
     				str.gsub!(/L<(.*?)>/) do |link|
 							link_and_ref = $1.split(/\|/)
@@ -119,7 +119,6 @@ module YARD
 
       class Sub < Code
         attr_accessor :comments, :comments_hash_flag, :comments_range, :name, :body
-        attr_writer   :visibility
 
         def visibility
           @visibility ||= @name.start_with?('_') ? :protected : :public
@@ -152,7 +151,11 @@ module YARD
         end
 
         def parse
-          PerlSyntax.parse(@source, @processor = Processor.new(@filename))
+					begin
+						PerlSyntax.parse(@source, @processor = Processor.new(@filename))
+					rescue
+						{}
+					end
 
           group   = nil
 					comments_for = {}
