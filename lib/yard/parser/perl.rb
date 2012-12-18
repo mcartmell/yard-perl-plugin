@@ -28,9 +28,11 @@ module YARD
 
       class Comment < Code
         def to_s
-          str = @content.gsub(/^\s*#/, '')
-          str.gsub!(/^ /, '') while str.lines.any? { |line| line =~ /^ / } && str.lines.all? { |line| line =~ /^ |^$/ }
-          str
+					str = @subcontent || @content
+          str = str.gsub(/^\s*#/, '')
+          str.gsub!(/\t/,'  ')
+					str.gsub!(/^ (\S)/m, '\1')
+					str
         end
 
         def lines
@@ -39,33 +41,58 @@ module YARD
 				
 				def initialize(args)
 					super
+					@subcontent = nil
 				end
 
 				class PodBlock < Comment
 
 					def initialize(args)
 						super
-						@pkg_description = nil
-						if m = @content.match(/=head\d NAME\n\n(\S+).*?=head\d DESCRIPTION(.*)?^=/ms)
-							@pkg_description = [m[1], m[2]]
+						@for = nil
+						@description = false
+						#TODO currently can only reference one sub per pod block. This should be modified to return multiple blocks.
+						#TODO 
+						if m = @content.match(/=head(\d) DESCRIPTION(.*)?^=(head\1|cut)/ms)
+							@for = :_file
+							@description = true
+							@subcontent = m[2]
+						elsif m = @content.match(/^=(?:item|head[2-9])\s+([^\n]+)(.+?)=(cut|back)/ms)
+							name = m[1]
+							if name.match(/<(\w+)>/)
+								name = $1
+							end
+							@for = name
+							@subcontent = m[2]
 						end
 					end
 
-					def pkg_description
-						@pkg_description
+					def is_description?
+						@description
 					end
 
+					def for
+						@for
+					end
+
+# Do some basic conversion of pod -> rdoc/yard syntax
 					def to_s
-						str = @content.lines.grep(/^[^\s=]/).join('')
+						str = super
+						str.gsub!(/^=head(\d+)/) do
+      				"=" * $1.to_i
+    				end
+    				str.gsub!(/=item/, '')
+    				str.gsub!(/C<(.*?)>/, '<tt>\1</tt>')
+    				str.gsub!(/I<(.*?)>/, '<i>\1</i>')
+    				str.gsub!(/B<(.*?)>/, '<b>\1</b>')
+    				str.gsub!(/L<(.*?)>/) do |link|
+							link_and_ref = $1.split(/\|/)
+							thing = link_and_ref[0]
+							text = link_and_ref[1]
+							text ? "{#{thing}|#{text}}" : "{#{thing}}"
+						end
 						str
 					end
 
-					def sub_for
-						if m = @content.match(/=item\s+([^\n]+)/)
-							return m[1]
-						end
-						return
-					end
 				end
       end
 
@@ -127,10 +154,8 @@ module YARD
 
 						'comment.block.documentation.perl' =>  proc do |s, e|
 							pb = Comment::PodBlock.new(e)
-							if pkgd = pb.pkg_description
-								comments_for[pkgd[0]] = pkgd[1]
-							elsif subname = pb.sub_for
-								comments_for[subname] = pb
+							if cf = pb.for
+								comments_for[cf] = pb
 							end
 							s << pb
 						end,
@@ -211,8 +236,12 @@ module YARD
             stack
           end
 					@stack.each do |e|
-						if (e.is_a?(Sub) || e.is_a?(Package)) && comments_for.has_key?(e.name)
+						if (e.is_a?(Sub) && comments_for.has_key?(e.name))
 							e.comments = comments_for[e.name].to_s + e.comments
+						end
+						if (e.is_a?(Package))
+							pkg_comments = comments_for.values.find{|e| e.respond_to?(:is_description?) && e.is_description?}
+							e.comments = pkg_comments.to_s + e.comments if pkg_comments
 						end
 					end
         end
