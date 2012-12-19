@@ -129,13 +129,19 @@ module YARD
 
           @parameters = [].tap do |params|
             @body.strip.lines.take_while do |line|
+							# scalar assignment
               if line.strip =~ /my\s+(.*?)\s*=\s*shift(\(\s*@_\s*\))?\s*;/
                 params << [$1,nil]
+							# multiple assignment in list context
               elsif line.strip =~ /my\s+\((.*?)\)\s*=\s*@_\s*;/
 									$1.split(/\s*(?:,|=>)\s*/).map { |e| [e, nil] }.each do |param|
 										params << param
 									end
                   false
+							# single assignment in list context
+							elsif line.strip =~ /my\s+(.*?)\s*=\s*(@_|validate\(@_,)/
+								params << [$1, nil]
+								false
               else
                 false
               end
