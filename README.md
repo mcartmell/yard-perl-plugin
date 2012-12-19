@@ -6,6 +6,10 @@ This means that Perl code documented with plain POD will look okay, and if you i
 
 See [the original readme](https://github.com/pvande/yard-perl-plugin/blob/master/README.md)
 
+# Usage
+
+  yard -e ../yard-perl-plugin/lib/yard-perl-plugin.rb test.pm 
+
 # Example
 
 ```
