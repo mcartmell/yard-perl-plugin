@@ -8,7 +8,8 @@ See [the original readme](https://github.com/pvande/yard-perl-plugin/blob/master
 
 # Usage
 
-  yard -e ../yard-perl-plugin/lib/yard-perl-plugin.rb test.pm 
+1. Install `ruby`, `yard` and `textpow`
+2. `yard -e ../yard-perl-plugin/lib/yard-perl-plugin.rb /some/perllib/**/*.pm`
 
 # Example
 
