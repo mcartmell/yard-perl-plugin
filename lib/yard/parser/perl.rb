@@ -51,7 +51,7 @@ module YARD
 						@description = false
 						@for_map = {}
 						# create sub-objects just for the purpose of stringifying to docstrings
-						if m = @content.match(/=head(\d) DESCRIPTION(.*?)^=(head\1|cut|back)/m)
+						if m = @content.match(/=head(\d) DESCRIPTION(.*?)^=(head\1|cut)/m)
 							pb = PodBlock.new({ content: m[2] })
 							pb.description = true
 							@for_map[:_file] = pb
